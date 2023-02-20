@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import irods
+from datetime import datetime
 
 RED = '\x1b[1;31m'
 DEFAULT = '\x1b[0m'
@@ -80,7 +81,7 @@ def irsync_irods_to_local(session: irods.session.iRODSSession, irodspath: str,
             return False
 
 
-def get_irods_size(session: irods.session.iRODSSession, path_names: list) -> int:
+def get_irods_size(session: irods.session, path_names: list) -> int:
     """
     Calculates the cumulative file size of a list of iRODS paths. Paths can point to iRODS data 
     objects or iRODS collections.
@@ -99,6 +100,38 @@ def get_irods_size(session: irods.session.iRODSSession, path_names: list) -> int
     return sum(irods_sizes)
 
 
-def annotate_data(session: irods.session.iRODSSession, irodspath: str, 
+def annotate_data(session: irods.session, irodspath: str, 
                   localpath: str, serverip: str):
+    """
+    Annnotates all data objects on the irodspath with metadata triple:
+        "data_copy_on_server", serverip:localpath, timestamp
+
+    Input: irods.session object, full irods path (coll or obj), 
+           full local path, server ip or fully qualified domain name
+    Output: True when metadata is added or already present, False otherwise
+    """
+    if session.collections.exist(irodspath):
+        annotate_objs = [obj for _, _, objs in coll.walk() for obj in objs]
+    elif session.data_objects.exists(irodspath):
+        annotate_objs = [session.data_objects.get(irodspath)]
+    else:
+        print(RED+"ERROR: Annotating %s failed" % (irodspath), DEFAULT)
+        print("\t Path does not exist.")
+        return False
+
+    timestamp = datetime.now()
+    for obj in annotate_objs:
+        try:
+            obj.metadata.add("data_copy_on_server", serverip+":"+localpath, 
+                    timestamp.strftime("%Y-%m-%d %H:%M"))
+            return True
+        except CATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME:
+            print(YEL+"INFO: Metadata already exists", irodspath)
+            return True
+        except CAT_NO_ACCESS_PERMISSION:
+            print(RED+"ERROR: No permission to add metadata", irodspath)
+            return False
+        except:
+            print(RED+"ERROR: Metadata could not be added", irodspath)
+            return False
 
