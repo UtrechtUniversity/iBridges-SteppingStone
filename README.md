@@ -7,7 +7,7 @@ For sensitive data sometimes the iRODS instance is protected by firewalls such t
 To bridge the firewall, usually a stepping stone server is setup at the p[eriphery of the network. This server can connect to iRODS and also to the compute facility.
 Hence there are two copy steps involved. Here we chose for `irsync` to transger the data from iRODS to the stepping stone server and `rsync` to copy the data from the stepping stone server to the final destination, e.g. the compute server or VM (see below).
 
-![](img/Stepping stone.png)
+![Stepping stone transfer][img/Stepping_stone.png)
 
 In this use case we assume that
 
