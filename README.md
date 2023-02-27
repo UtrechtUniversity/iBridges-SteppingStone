@@ -20,7 +20,7 @@ In this use case we assume that
 - `icommands` are installed on stepping stone server
 - Python dependencies on stepping stone server:
 	- Python 3.X
-	- python-connector version 1.X
+	- python-irodsclient version 1.X
 
 The scripts will be executed on the stepping stone server.
 
@@ -29,15 +29,24 @@ The scripts will be executed on the stepping stone server.
 ## Installation & configuration
 
 - iRODS: a valid iRODS configuration file in `~/.irods/irods_environment.json`
-- Python dependencies: `pip3 install -r requirements.txt`
+- Python dependencies: `pip3 install python-irodsclient==1.1.6`
 - Client configuration:
 	- The client needs to be given the information which destination server to copy data to and which user to use for the actions.
 	- Configuration file in `~/.irods/transfer.config`
 	
 	```sh
-	[transfer]
-    serverip: IP/FQDN of the destination server
-    datauser: user 
+	[remote]
+    serverip: IP address or FQDN
+    datauser: user
     sudo: False
+
+    [local_cache]
+    limit = number of GB of free space on stepping stone server, only the number
     ```
+
+## Usage
+```
+Usage: python3 transfer_workflow.py -i, --input=csv-file-path
+Example: python3 transfer_workflow.py -i /home/user/transfer.csv
+```
 	
