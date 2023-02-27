@@ -2,7 +2,8 @@ import subprocess
 import json
 import os
 import sys
-import irods
+import irods.session
+from irods.exception import CATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME, CAT_NO_ACCESS_PERMISSION
 from datetime import datetime
 
 RED = '\x1b[1;31m'
@@ -26,13 +27,13 @@ def read_irods_env() -> dict:
         sys.exit(1)
 
 
-def test_irods_connection() -> tuple:
+def init_irods_connection() -> tuple:
     """
     Tests whether a connection to an irods server can be established.
-    Expects an irods_environment.json file in ~/.irods.
+    Expects an irods_environment.json file and a valid scrambled password .iRODS in ~/.irods.
     Creates a dictionary from the environment file.
 
-    Returns: irods.session.iRODSSession, dictionary
+    Returns: irods.session, dictionary
     """
     ienv = read_irods_env()
     res = subprocess.run(["ils"], input="bogus".encode(),
@@ -50,7 +51,7 @@ def test_irods_connection() -> tuple:
 
 
 def irsync_irods_to_local(session: irods.session.iRODSSession, irodspath: str,
-                          localpath=os.environ['HOME']+"/dump") -> bool:
+                          localpath: str) -> bool:
     """
     Given an iRODS path and a localpath, transfers data from iRODS to a local filesystem.
     During the transport checksums are checked on the fly and, if not present, registered in iRODS.
@@ -59,8 +60,6 @@ def irsync_irods_to_local(session: irods.session.iRODSSession, irodspath: str,
 
     Returns: True upon success; False otherwise
     """
-    print("DEBUG: Transferring %s --> %s" % (irodspath, localpath))
-
     if not os.path.isdir(localpath):
         print(RED+"ERROR: Destination", localpath, "does not exist", DEFAULT)
         sys.exit(1)
@@ -83,8 +82,8 @@ def irsync_irods_to_local(session: irods.session.iRODSSession, irodspath: str,
 
 def get_irods_size(session: irods.session, path_names: list) -> int:
     """
-    Calculates the cumulative file size of a list of iRODS paths. Paths can point to iRODS data 
-    objects or iRODS collections.
+    Calculates the cumulative file size of a list of iRODS paths. Paths can
+    point toiRODS data objects or iRODS collections.
 
     Input: irods.session object, list of iRODS path names
     Output: cumulative sum of all file sizes
@@ -100,17 +99,35 @@ def get_irods_size(session: irods.session, path_names: list) -> int:
     return sum(irods_sizes)
 
 
-def annotate_data(session: irods.session, irodspath: str, 
+def map_collitems_to_local_path(session: irods.session, collpath: str, localpath: str) -> list:
+    """
+    irsync automatically creates subfolders etc, with this function we get
+    the mapping from a collection to its absolute path in a folder.
+    """
+    coll = session.collections.get(collpath)
+    destination = localpath+"/"+os.path.basename(coll.path)
+    objs = [obj for _, _, objs in coll.walk() for obj in objs]
+
+    obj_to_file = []
+
+    for obj in objs:
+        obj_to_file.append((obj.path, destination+obj.path.split(coll.path)[1]))
+
+    return obj_to_file
+
+
+def annotate_data(session: irods.session, irodspath: str,
                   localpath: str, serverip: str):
     """
     Annnotates all data objects on the irodspath with metadata triple:
         "data_copy_on_server", serverip:localpath, timestamp
 
-    Input: irods.session object, full irods path (coll or obj), 
+    Input: irods.session object, full irods path (coll or obj),
            full local path, server ip or fully qualified domain name
     Output: True when metadata is added or already present, False otherwise
     """
-    if session.collections.exist(irodspath):
+    if session.collections.exists(irodspath):
+        coll = session.collections.get(irodspath)
         annotate_objs = [obj for _, _, objs in coll.walk() for obj in objs]
     elif session.data_objects.exists(irodspath):
         annotate_objs = [session.data_objects.get(irodspath)]
@@ -120,18 +137,14 @@ def annotate_data(session: irods.session, irodspath: str,
         return False
 
     timestamp = datetime.now()
+    print(annotate_objs)
     for obj in annotate_objs:
         try:
-            obj.metadata.add("data_copy_on_server", serverip+":"+localpath, 
-                    timestamp.strftime("%Y-%m-%d %H:%M"))
-            return True
+            obj.metadata.add("data_copy_on_server", serverip+":"+localpath,
+                             timestamp.strftime("%Y-%m-%d"))
         except CATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME:
-            print(YEL+"INFO: Metadata already exists", irodspath)
-            return True
+            print(YEL+"INFO: Metadata already exists", irodspath, DEFAULT)
         except CAT_NO_ACCESS_PERMISSION:
-            print(RED+"ERROR: No permission to add metadata", irodspath)
-            return False
-        except:
-            print(RED+"ERROR: Metadata could not be added", irodspath)
-            return False
-
+            print(RED+"ERROR: No permission to add metadata", irodspath, DEFAULT)
+        except Exception:
+            print(RED+"ERROR: Metadata could not be added", irodspath, DEFAULT)
