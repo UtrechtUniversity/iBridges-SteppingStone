@@ -17,23 +17,21 @@ def ssh_check_connection(datauser: str, serverip: str) -> bool:
         print_success(f"Connected: {datauser}@{serverip}")
         return True
 
-
 def create_remote_dir(datauser: str, serverip: str, sudo: bool, dirpath: str) -> bool:
     """
     Creates a folder on a remote server.
     dirpath: full absolute path
     Returns: True upon success
     """
-    print("Ensure directory: %s:%s" % (serverip, dirpath))
-    mkdir = subprocess.run(["ssh", datauser+"@"+serverip, "mkdir -p", dirpath],
+    print(f"Ensure directory: {serverip}:{dirpath}")
+    mkdir = subprocess.run(["ssh", f"{datauser}@{serverip}", "mkdir -p", dirpath],
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if mkdir.stderr:
-        print(RED+"mkdir failed: ", datauser, serverip, dirpath, DEFAULT)
-        print(mkdir.stderr.decode())
+        print_error(f"mkdir failed: {datauser} {serverip} {dirpath}")
+        print_message(mkdir.stderr.decode())
         return False
     else:
         return True
-
 
 def empty_dir(directory: str):
     for path in Path(directory).glob("**/*"):
@@ -41,7 +39,6 @@ def empty_dir(directory: str):
             path.unlink()
         elif path.is_dir():
             rmtree(path)
-
 
 def rsync_local_to_remote(datauser: str, serverip: str, sudo: bool,
                           sourcepath: str, destpath: str) -> bool:
@@ -60,21 +57,20 @@ def rsync_local_to_remote(datauser: str, serverip: str, sudo: bool,
     Returns: True (success), False (failure)
     """
 
-    print("Uploading data: %s --> %s@%s:%s" % (sourcepath, datauser, serverip, destpath))
+    print_message(f"Uploading data: {sourcepath} --> {datauser}@{serverip}:{destpath}")
     if sudo:
         res = subprocess.run(['rsync', '--rsync-path="sudo rsync"',
-                             '-rc --relative', sourcepath,
-                              datauser+"@"+serverip+':'+destpath],
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                              '-rc --relative', sourcepath,
+                              f"{datauser}@{serverip}:{destpath}"],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     else:
-        res = subprocess.run(['rsync', '-rc',
-                             sourcepath, datauser+"@"+serverip+':'+destpath],
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        res = subprocess.run(['rsync', '-rc', sourcepath,
+                              f"{datauser}@{serverip}:{destpath}"],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     if res.stderr:
-        print(RED+"rsync failed:", DEFAULT)
-        print(res.stderr)
+        print_error(f"rsync failed: {res.stderr}")
         return False
     else:
-        print(YEL+"\t --> Data transfer complete", DEFAULT)
+        print_warning("--> Data transfer complete")
         return True
