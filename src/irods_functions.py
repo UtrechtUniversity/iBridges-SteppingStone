@@ -1,11 +1,10 @@
 import subprocess
 import json
 import os
-import sys
-import irods.session
-from irods.exception import CATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME, CAT_NO_ACCESS_PERMISSION
 from datetime import datetime
 from typing import Union
+import irods.session
+from irods.exception import CATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME, CAT_NO_ACCESS_PERMISSION
 from src.utils import print_error, print_warning, print_message
 
 def read_irods_env(irods_env_file: str) -> dict:
@@ -13,8 +12,8 @@ def read_irods_env(irods_env_file: str) -> dict:
     Expects a json file in ~/.irods/irods_environment.json
     Returns the whole file as dictionary
     """
-    with open(irods_env_file) as f:
-        ienv = json.load(f)
+    with open(irods_env_file, encoding='utf-8') as file:
+        ienv = json.load(file)
     return ienv
 
 def init_irods_connection(irods_env_file: str) -> Union[tuple, bool]:
@@ -27,16 +26,16 @@ def init_irods_connection(irods_env_file: str) -> Union[tuple, bool]:
     """
     ienv = read_irods_env(irods_env_file=irods_env_file)
     res = subprocess.run(["ils"], input="bogus".encode(),
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     if res.returncode == 0:
         print_message(f"Connected to: {ienv.get('irods_host')}")
         print_message(res.stdout.decode())
         session = irods.session.iRODSSession(irods_env_file=irods_env_file)
         return (session, ienv)
-    else:
-        print_error("ERROR: Cannot connect to iRODS server")
-        print_message("Please do an iinit")
-        return False
+
+    print_error("ERROR: Cannot connect to iRODS server")
+    print_message("Please do an iinit")
+    return False
 
 def irsync_irods_to_local(session: irods.session.iRODSSession, irodspath: str,
                           localpath: str) -> bool:
@@ -51,21 +50,21 @@ def irsync_irods_to_local(session: irods.session.iRODSSession, irodspath: str,
     if not os.path.isdir(localpath):
         print_error(f"ERROR: Destination {localpath} does not exist")
         return False
-    else:
-        itemname = os.path.basename(irodspath)
-        if session.collections.exists(irodspath) or session.data_objects.exists(irodspath):
-            res = subprocess.run(["irsync", "-Kr", f"i:{irodspath}", f"{localpath}/{itemname}"],
-                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            if res.returncode == 0:
-                return True
-            else:
-                print_error(f"ERROR: Transferring {irodspath} --> {localpath} failed")
-                print_message(res)
-                return False
-        else:
-            print_error(f"ERROR: Transferring {irodspath} --> {localpath} failed")
-            print_message("iRODS path not known.")
-            return False
+
+    itemname = os.path.basename(irodspath)
+    if session.collections.exists(irodspath) or session.data_objects.exists(irodspath):
+        res = subprocess.run(["irsync", "-Kr", f"i:{irodspath}", f"{localpath}/{itemname}"],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        if res.returncode == 0:
+            return True
+
+        print_error(f"ERROR: Transferring {irodspath} --> {localpath} failed")
+        print_message(res)
+        return False
+
+    print_error(f"ERROR: Transferring {irodspath} --> {localpath} failed")
+    print_message("iRODS path not known.")
+    return False
 
 def get_irods_size(session: irods.session, path_names: list) -> int:
     """

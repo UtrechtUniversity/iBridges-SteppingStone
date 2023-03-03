@@ -4,7 +4,7 @@ import os
 import sys
 from datetime import datetime
 
-import src.irods
+import src.irods_functions
 import src.rsync
 import src.utils
 
@@ -82,7 +82,7 @@ class iBridgesSteppingStone:
             sys.exit(1)
 
         # Create iRODS session
-        irods_conn = src.irods.init_irods_connection(irods_env_file=self.irods_env_file)
+        irods_conn = src.irods_functions.init_irods_connection(irods_env_file=self.irods_env_file)
 
         if irods_conn:
             session, _ = irods_conn
@@ -115,7 +115,7 @@ class iBridgesSteppingStone:
             print_message(f"STATUS: Fetch data from iRODS {key} --> {localcache}")
 
             # Determine size of source
-            size = src.irods.get_irods_size(session, [key])
+            size = src.irods_functions.get_irods_size(session, [key])
             if size > cachelimit:
                 print_warning(f"WARNING: Datasize exceeds cache size: {key}")
                 failure.append((key, file, "Exceeds cache"))
@@ -129,7 +129,7 @@ class iBridgesSteppingStone:
                 continue
 
             # irsync data to stepping stone
-            irods_success = src.irods.irsync_irods_to_local(session, key, localcache)
+            irods_success = src.irods_functions.irsync_irods_to_local(session, key, localcache)
             if not irods_success:
                 print_error(f"ERROR iRODS: transfer failed {key} {localcache}")
                 failure.append((key, file, "iRODS transfer (irsync) failed"))
@@ -142,11 +142,11 @@ class iBridgesSteppingStone:
             if rsync_success:
                 success.append((key, file))
                 if session.collections.exists(key):
-                    success.extend(src.irods.map_collitems_to_local_path(session, key, destination))
+                    success.extend(src.irods_functions.map_collitems_to_local_path(session, key, destination))
 
                 # Create iRODS metadata entry
                 # print("DEBUG: annotate", key)
-                # src.irods.annotate_data(session, key, f"{destination}/{os.path.basename(key)}", serverip)
+                # src.irods_functions.annotate_data(session, key, f"{destination}/{os.path.basename(key)}", serverip)
                 # Delete cache
                 src.rsync.empty_dir(localcache)
             else:
