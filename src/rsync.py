@@ -8,14 +8,14 @@ def ssh_check_connection(datauser: str, serverip: str) -> bool:
     Check ssh datauser@serverip and execute uname -a.
     """
     ssh = subprocess.run(["ssh", "-o ConnectTimeout=30", f"{datauser}@{serverip}", "uname -a"],
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     if ssh.stderr:
         print_error(f"Connection failed: {datauser}@{serverip}")
         print_message(ssh.stderr.decode())
         return False
-    else:
-        print_success(f"Connected: {datauser}@{serverip}")
-        return True
+
+    print_success(f"Connected: {datauser}@{serverip}")
+    return True
 
 def create_remote_dir(datauser: str, serverip: str, sudo: bool, dirpath: str) -> bool:
     """
@@ -25,13 +25,13 @@ def create_remote_dir(datauser: str, serverip: str, sudo: bool, dirpath: str) ->
     """
     print(f"Ensure directory: {serverip}:{dirpath}")
     mkdir = subprocess.run(["ssh", f"{datauser}@{serverip}", "mkdir -p", dirpath],
-                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     if mkdir.stderr:
         print_error(f"mkdir failed: {datauser} {serverip} {dirpath}")
         print_message(mkdir.stderr.decode())
         return False
-    else:
-        return True
+
+    return True
 
 def empty_dir(directory: str):
     for path in Path(directory).glob("**/*"):
@@ -62,15 +62,15 @@ def rsync_local_to_remote(datauser: str, serverip: str, sudo: bool,
         res = subprocess.run(['rsync', '--rsync-path="sudo rsync"',
                               '-rc --relative', sourcepath,
                               f"{datauser}@{serverip}:{destpath}"],
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     else:
         res = subprocess.run(['rsync', '-rc', sourcepath,
                               f"{datauser}@{serverip}:{destpath}"],
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
     if res.stderr:
         print_error(f"rsync failed: {res.stderr}")
         return False
-    else:
-        print_warning("--> Data transfer complete")
-        return True
+
+    print_warning("--> Data transfer complete")
+    return True
