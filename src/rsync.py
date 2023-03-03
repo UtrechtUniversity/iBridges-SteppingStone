@@ -69,7 +69,7 @@ def rsync_local_to_remote(datauser: str, serverip: str, sudo: bool,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
     if res.stderr:
-        print_error(f"rsync failed: {res.stderr}")
+        print_error(f"rsync failed: {str(res.stderr)}")
         return False
 
     print_warning("--> Data transfer complete")
