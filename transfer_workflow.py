@@ -52,7 +52,7 @@ class iBridgesSteppingStone:
 
         if len(source_to_dest) == 0:
             print_error("Nothing to transfer")
-            print_message("\tEmpty file, or not a CSV-file")
+            print_message("Empty file, or not a CSV-file")
             exit(1)
 
         config = src.utils.get_config(configfile=self.transfer_config)
@@ -63,7 +63,8 @@ class iBridgesSteppingStone:
             exit(1)
 
         # Check ssh connection and auth
-        src.rsync.ssh_check_connection(datauser, serverip)
+        if not src.rsync.ssh_check_connection(datauser, serverip):
+            exit(1)
 
         # Create iRODS session
         session, ienv = src.irods.init_irods_connection()

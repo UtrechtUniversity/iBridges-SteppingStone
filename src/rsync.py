@@ -1,26 +1,21 @@
 import subprocess
-import sys
 from pathlib import Path
 from shutil import rmtree
+from src.utils import print_error, print_warning, print_message, print_success
 
-RED = '\x1b[1;31m'
-DEFAULT = '\x1b[0m'
-YEL = '\x1b[1;33m'
-BLUE = '\x1b[1;34m'
-
-
-def ssh_check_connection(datauser: str, serverip: str):
+def ssh_check_connection(datauser: str, serverip: str) -> bool:
     """
     Check ssh datauser@serverip and execute uname -a.
     """
-    ssh = subprocess.run(["ssh", "-o ConnectTimeout=30", datauser+"@"+serverip, "uname -a"],
+    ssh = subprocess.run(["ssh", "-o ConnectTimeout=30", f"{datauser}@{serverip}", "uname -a"],
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if ssh.stderr:
-        print(RED+"Connection failed: ", datauser, serverip, DEFAULT)
-        print(ssh.stderr.decode())
-        sys.exit(1)
+        print_error(f"Connection failed: {datauser}@{serverip}")
+        print_message(ssh.stderr.decode())
+        return False
     else:
-        print(BLUE, "Connected: ", datauser, serverip, DEFAULT)
+        print_success(f"Connected: {datauser}@{serverip}")
+        return True
 
 
 def create_remote_dir(datauser: str, serverip: str, sudo: bool, dirpath: str) -> bool:

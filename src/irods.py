@@ -5,6 +5,7 @@ import sys
 import irods.session
 from irods.exception import CATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME, CAT_NO_ACCESS_PERMISSION
 from datetime import datetime
+from typing import Union
 
 RED = '\x1b[1;31m'
 DEFAULT = '\x1b[0m'
@@ -27,7 +28,7 @@ def read_irods_env() -> dict:
         sys.exit(1)
 
 
-def init_irods_connection() -> tuple:
+def init_irods_connection() -> Union[tuple, bool]
     """
     Tests whether a connection to an irods server can be established.
     Expects an irods_environment.json file and a valid scrambled password .iRODS in ~/.irods.
