@@ -12,7 +12,7 @@ def read_irods_env(irods_env_file: str) -> dict:
     Expects a json file in ~/.irods/irods_environment.json
     Returns the whole file as dictionary
     """
-    with open(irods_env_file, encoding='utf-8') as file:
+    with open(irods_env_file) as file:
         ienv = json.load(file)
     return ienv
 

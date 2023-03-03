@@ -23,7 +23,7 @@ def print_success(message: str) -> None:
 
 def get_config(configfile: str) -> Union[tuple, bool]:
     config = configparser.ConfigParser()
-    with open(configfile, encoding='utf-8') as file:
+    with open(configfile) as file:
         config.read_file(file)
         if 'remote' in config:
             datauser = config.get('remote', 'datauser')
@@ -37,7 +37,7 @@ def get_config(configfile: str) -> Union[tuple, bool]:
 
 def read_source_dest_csv(filename: str) -> dict:
     source_to_dest = {}
-    with open(filename, "r", encoding='utf-8') as csv_file:
+    with open(filename, "r") as csv_file:
         csv_reader = csv.reader(csv_file)
         for line in csv_reader:
             try:
@@ -66,7 +66,7 @@ def write_csv(success: list,
               failure: list,
               successpath: str,
               failurepath: str) -> None:
-    with open(successpath, 'w', encoding='utf-8') as out:
+    with open(successpath, 'w') as out:
         csv_out = csv.writer(out)
         csv_out.writerow(['iRODS', 'local'])
         for row in success:
@@ -74,7 +74,7 @@ def write_csv(success: list,
 
     print_message(f"Wrote succesful transfers to {successpath}")
 
-    with open(failurepath, 'w', encoding='utf-8') as out:
+    with open(failurepath, 'w') as out:
         csv_out = csv.writer(out)
         csv_out.writerow(['iRODS', 'local', 'reason'])
         for row in failure:
