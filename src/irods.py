@@ -122,7 +122,7 @@ def annotate_data(session: irods.session, irodspath: str,
         return False
 
     timestamp = datetime.now()
-    print(annotate_objs)
+    print_message(annotate_objs)
     for obj in annotate_objs:
         try:
             obj.metadata.add("data_copy_on_server", serverip+":"+localpath,
