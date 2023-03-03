@@ -3,47 +3,41 @@ import os
 import csv
 from typing import Union
 
-def print_message(message: str, type: int=0) -> None:
+def print_message(message: str, level: int=0) -> None:
     colors = {
         0: '\x1b[0m',    # DEFAULT (info)
         1: '\x1b[1;33m', # YEL (warn)
         2: '\x1b[1;31m', # RED (error)
         3: '\x1b[1;34m', # BLUE (success)
     }
-    print(f"{colors[type]}{message}{colors[0]}")
+    print(f"{colors[level]}{message}{colors[0]}")
 
 def print_error(message: str) -> None:
-    print_message(message, type=2)
+    print_message(message, level=2)
 
 def print_warning(message: str) -> None:
-    print_message(message, type=1)
+    print_message(message, level=1)
 
 def print_success(message: str) -> None:
-    print_message(message, type=3)
+    print_message(message, level=3)
 
 def get_config(configfile: str) -> Union[tuple, bool]:
-    if not os.path.isfile(configfile):
-        print_error(f"ERROR reading config file {configfile}")
-        print_message("File does not exist.")
-        return False
-
     config = configparser.ConfigParser()
-    config.read_file(open(configfile))
-    args = config._sections
+    with open(configfile, encoding='utf-8') as file:
+        config.read_file(file)
+        if 'remote' in config:
+            datauser = config.get('remote', 'datauser')
+            serverip = config.get('remote', 'serverip')
+            sudo = config.getboolean('remote', 'sudo')
+            cachelimit = (config.getfloat('local_cache', 'limit') * 1073741824) # GB to bytes
+            return (datauser, serverip, sudo, cachelimit)
 
-    if 'remote' in args:
-        datauser = config.get('remote', 'datauser')
-        serverip = config.get('remote', 'serverip')
-        sudo = config.getboolean('remote', 'sudo')
-        cachelimit = (config.getfloat('local_cache', 'limit') * 1073741824) # GB to bytes
-        return (datauser, serverip, sudo, cachelimit)
-    else:
         print_error("ERROR config section expected: remote")
         return False
 
 def read_source_dest_csv(filename: str) -> dict:
     source_to_dest = {}
-    with open(filename, "r") as csv_file:
+    with open(filename, "r", encoding='utf-8') as csv_file:
         csv_reader = csv.reader(csv_file)
         for line in csv_reader:
             try:
@@ -68,11 +62,11 @@ def create_dir(path: str) -> bool:
     except Exception:
         return False
 
-def write_csv(success: list, 
-              failure: list, 
-              successpath: str, 
+def write_csv(success: list,
+              failure: list,
+              successpath: str,
               failurepath: str) -> None:
-    with open(successpath, 'w') as out:
+    with open(successpath, 'w', encoding='utf-8') as out:
         csv_out = csv.writer(out)
         csv_out.writerow(['iRODS', 'local'])
         for row in success:
@@ -80,7 +74,7 @@ def write_csv(success: list,
 
     print_message(f"Wrote succesful transfers to {successpath}")
 
-    with open(failurepath, 'w') as out:
+    with open(failurepath, 'w', encoding='utf-8') as out:
         csv_out = csv.writer(out)
         csv_out.writerow(['iRODS', 'local', 'reason'])
         for row in failure:
