@@ -90,13 +90,10 @@ class iBridgesSteppingStone:
             sys.exit(1)
 
         # Check if iRODS paths exist
-        # popkeys = []
-        for key in source_to_dest:
+        for key in list(source_to_dest.keys()):
             if not session.data_objects.exists(key) and not session.collections.exists(key):
                 print_warning(f"WARNING: iRODS path does not exist: {key}")
-                # popkeys.append(key)
-                source_to_dest.pop(key)
-        # [source_to_dest.pop(key) for key in popkeys]
+                del source_to_dest[key]
 
         if len(source_to_dest) == 0:
             print_error("Nothing to transfer, check CSV-file")

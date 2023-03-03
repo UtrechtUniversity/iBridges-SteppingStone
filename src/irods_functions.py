@@ -26,7 +26,7 @@ def init_irods_connection(irods_env_file: str) -> Union[tuple, bool]:
     """
     ienv = read_irods_env(irods_env_file=irods_env_file)
     res = subprocess.run(["ils"], input="bogus".encode(),
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if res.returncode == 0:
         print_message(f"Connected to: {ienv.get('irods_host')}")
         print_message(res.stdout.decode())
@@ -54,7 +54,7 @@ def irsync_irods_to_local(session: irods.session.iRODSSession, irodspath: str,
     itemname = os.path.basename(irodspath)
     if session.collections.exists(irodspath) or session.data_objects.exists(irodspath):
         res = subprocess.run(["irsync", "-Kr", f"i:{irodspath}", f"{localpath}/{itemname}"],
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if res.returncode == 0:
             return True
 
