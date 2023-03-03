@@ -1,6 +1,5 @@
 #!python3
 import argparse
-# import getopt
 import os
 from datetime import datetime
 
@@ -48,34 +47,7 @@ class iBridgesSteppingStone:
             output_folder=args.output,
             transfer_config=args.config)
     
-    # def printHelp():
-    #     print('Data transfer from iRODS thrigh stepping stone server to linux destination server')
-    #     print('Usage: python3 transfer_workflow.py -i, --input=csv-file-path')
-    #     print('Example: python3 transfer_workflow.py -i /home/user/transfer.csv')
-
-
     def transfer(self):
-        # try:
-        #     opts, args = getopt.getopt(argv, "hi:", ["input="])
-        #     if opts == []:
-        #         print(RED+"ERROR: incorrect usage."+DEFAULT)
-        #         printHelp()
-        #         sys.exit(2)
-        # except getopt.GetoptError:
-        #     print(RED+"ERROR: incorrect usage."+DEFAULT)
-        #     printHelp()
-        #     sys.exit(2)
-
-        # for opt, arg in opts:
-        #     if opt == '-h':
-        #         printHelp()
-        #         sys.exit(2)
-        #     elif opt in ['-i', '--input']:
-        #         csvfile = arg
-        #     else:
-        #         printHelp()
-        #         sys.exit(2)
-
         source_to_dest = src.utils.read_source_dest_csv(filename=self.input_csv)
 
         if len(source_to_dest) == 0:
