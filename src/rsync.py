@@ -1,27 +1,21 @@
 import subprocess
-import sys
 from pathlib import Path
 from shutil import rmtree
+from src.utils import print_error, print_warning, print_message, print_success
 
-RED = '\x1b[1;31m'
-DEFAULT = '\x1b[0m'
-YEL = '\x1b[1;33m'
-BLUE = '\x1b[1;34m'
-
-
-def ssh_check_connection(datauser: str, serverip: str):
+def ssh_check_connection(datauser: str, serverip: str) -> bool:
     """
     Check ssh datauser@serverip and execute uname -a.
     """
-    ssh = subprocess.run(["ssh", "-o ConnectTimeout=30", datauser+"@"+serverip, "uname -a"],
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    ssh = subprocess.run(["ssh", "-o ConnectTimeout=30", f"{datauser}@{serverip}", "uname -a"],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     if ssh.stderr:
-        print(RED+"Connection failed: ", datauser, serverip, DEFAULT)
-        print(ssh.stderr.decode())
-        sys.exit(1)
-    else:
-        print(BLUE, "Connected: ", datauser, serverip, DEFAULT)
+        print_error(f"Connection failed: {datauser}@{serverip}")
+        print_message(ssh.stderr.decode())
+        return False
 
+    print_success(f"Connected: {datauser}@{serverip}")
+    return True
 
 def create_remote_dir(datauser: str, serverip: str, sudo: bool, dirpath: str) -> bool:
     """
@@ -29,16 +23,15 @@ def create_remote_dir(datauser: str, serverip: str, sudo: bool, dirpath: str) ->
     dirpath: full absolute path
     Returns: True upon success
     """
-    print("Ensure directory: %s:%s" % (serverip, dirpath))
-    mkdir = subprocess.run(["ssh", datauser+"@"+serverip, "mkdir -p", dirpath],
-                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    print(f"Ensure directory: {serverip}:{dirpath}")
+    mkdir = subprocess.run(["ssh", f"{datauser}@{serverip}", "mkdir -p", dirpath],
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     if mkdir.stderr:
-        print(RED+"mkdir failed: ", datauser, serverip, dirpath, DEFAULT)
-        print(mkdir.stderr.decode())
+        print_error(f"mkdir failed: {datauser} {serverip} {dirpath}")
+        print_message(mkdir.stderr.decode())
         return False
-    else:
-        return True
 
+    return True
 
 def empty_dir(directory: str):
     for path in Path(directory).glob("**/*"):
@@ -46,7 +39,6 @@ def empty_dir(directory: str):
             path.unlink()
         elif path.is_dir():
             rmtree(path)
-
 
 def rsync_local_to_remote(datauser: str, serverip: str, sudo: bool,
                           sourcepath: str, destpath: str) -> bool:
@@ -65,21 +57,20 @@ def rsync_local_to_remote(datauser: str, serverip: str, sudo: bool,
     Returns: True (success), False (failure)
     """
 
-    print("Uploading data: %s --> %s@%s:%s" % (sourcepath, datauser, serverip, destpath))
+    print_message(f"Uploading data: {sourcepath} --> {datauser}@{serverip}:{destpath}")
     if sudo:
         res = subprocess.run(['rsync', '--rsync-path="sudo rsync"',
-                             '-rc --relative', sourcepath,
-                              datauser+"@"+serverip+':'+destpath],
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                              '-rc --relative', sourcepath,
+                              f"{datauser}@{serverip}:{destpath}"],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     else:
-        res = subprocess.run(['rsync', '-rc',
-                             sourcepath, datauser+"@"+serverip+':'+destpath],
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        res = subprocess.run(['rsync', '-rc', sourcepath,
+                              f"{datauser}@{serverip}:{destpath}"],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
 
     if res.stderr:
-        print(RED+"rsync failed:", DEFAULT)
-        print(res.stderr)
+        print_error(f"rsync failed: {str(res.stderr)}")
         return False
-    else:
-        print(YEL+"\t --> Data transfer complete", DEFAULT)
-        return True
+
+    print_warning("--> Data transfer complete")
+    return True

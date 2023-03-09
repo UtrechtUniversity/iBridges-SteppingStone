@@ -1,33 +1,22 @@
 import subprocess
 import json
 import os
-import sys
+from datetime import datetime
+from typing import Union
 import irods.session
 from irods.exception import CATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME, CAT_NO_ACCESS_PERMISSION
-from datetime import datetime
+from src.utils import print_error, print_warning, print_message
 
-RED = '\x1b[1;31m'
-DEFAULT = '\x1b[0m'
-YEL = '\x1b[1;33m'
-BLUE = '\x1b[1;34m'
-
-
-def read_irods_env() -> dict:
+def read_irods_env(irods_env_file: str) -> dict:
     """
     Expects a json file in ~/.irods/irods_environment.json
-    Returns the whole file aas dictionary
+    Returns the whole file as dictionary
     """
-    envFile = os.environ['HOME'] + "/.irods/irods_environment.json"
-    if os.path.exists(envFile):
-        with open(envFile) as f:
-            ienv = json.load(f)
-        return ienv
-    else:
-        print(RED+"ERROR:", os.environ['HOME']+"/.irods/irods_environment.json not found", DEFAULT)
-        sys.exit(1)
+    with open(irods_env_file) as file:
+        ienv = json.load(file)
+    return ienv
 
-
-def init_irods_connection() -> tuple:
+def init_irods_connection(irods_env_file: str) -> Union[tuple, bool]:
     """
     Tests whether a connection to an irods server can be established.
     Expects an irods_environment.json file and a valid scrambled password .iRODS in ~/.irods.
@@ -35,20 +24,18 @@ def init_irods_connection() -> tuple:
 
     Returns: irods.session, dictionary
     """
-    ienv = read_irods_env()
+    ienv = read_irods_env(irods_env_file=irods_env_file)
     res = subprocess.run(["ils"], input="bogus".encode(),
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     if res.returncode == 0:
-        print("Connected to:", ienv.get('irods_host'))
-        print(res.stdout.decode())
-        session = irods.session.iRODSSession(
-                irods_env_file=os.environ['HOME']+"/.irods/irods_environment.json")
+        print_message(f"Connected to: {ienv.get('irods_host')}")
+        print_message(res.stdout.decode())
+        session = irods.session.iRODSSession(irods_env_file=irods_env_file)
         return (session, ienv)
-    else:
-        print(RED+"ERROR: Cannot connect to iRODS server", DEFAULT)
-        print("Please do an iinit")
-        sys.exit(1)
 
+    print_error("ERROR: Cannot connect to iRODS server")
+    print_message("Please do an iinit")
+    return False
 
 def irsync_irods_to_local(session: irods.session.iRODSSession, irodspath: str,
                           localpath: str) -> bool:
@@ -61,24 +48,23 @@ def irsync_irods_to_local(session: irods.session.iRODSSession, irodspath: str,
     Returns: True upon success; False otherwise
     """
     if not os.path.isdir(localpath):
-        print(RED+"ERROR: Destination", localpath, "does not exist", DEFAULT)
-        sys.exit(1)
-    else:
-        itemname = os.path.basename(irodspath)
-        if session.collections.exists(irodspath) or session.data_objects.exists(irodspath):
-            res = subprocess.run(["irsync", "-Kr", "i:"+irodspath, localpath+"/"+itemname],
-                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            if res.returncode == 0:
-                return True
-            else:
-                print(RED+"ERROR: Transferring %s --> %s failed" % (irodspath, localpath), DEFAULT)
-                print(res)
-                return False
-        else:
-            print(RED+"ERROR: Transferring %s --> %s failed" % (irodspath, localpath), DEFAULT)
-            print("\t iRODS path not known.")
-            return False
+        print_error(f"ERROR: Destination {localpath} does not exist")
+        return False
 
+    itemname = os.path.basename(irodspath)
+    if session.collections.exists(irodspath) or session.data_objects.exists(irodspath):
+        res = subprocess.run(["irsync", "-Kr", f"i:{irodspath}", f"{localpath}/{itemname}"],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        if res.returncode == 0:
+            return True
+
+        print_error(f"ERROR: Transferring {irodspath} --> {localpath} failed")
+        print_message(res)
+        return False
+
+    print_error(f"ERROR: Transferring {irodspath} --> {localpath} failed")
+    print_message("iRODS path not known.")
+    return False
 
 def get_irods_size(session: irods.session, path_names: list) -> int:
     """
@@ -98,14 +84,13 @@ def get_irods_size(session: irods.session, path_names: list) -> int:
             irods_sizes.append(sum((sum((obj.size for obj in objs)) for _, _, objs in coll.walk())))
     return sum(irods_sizes)
 
-
 def map_collitems_to_local_path(session: irods.session, collpath: str, localpath: str) -> list:
     """
     irsync automatically creates subfolders etc, with this function we get
     the mapping from a collection to its absolute path in a folder.
     """
     coll = session.collections.get(collpath)
-    destination = localpath+"/"+os.path.basename(coll.path)
+    destination = f"{localpath}/{os.path.basename(coll.path)}"
     objs = [obj for _, _, objs in coll.walk() for obj in objs]
 
     obj_to_file = []
@@ -114,7 +99,6 @@ def map_collitems_to_local_path(session: irods.session, collpath: str, localpath
         obj_to_file.append((obj.path, destination+obj.path.split(coll.path)[1]))
 
     return obj_to_file
-
 
 def annotate_data(session: irods.session, irodspath: str,
                   localpath: str, serverip: str):
@@ -132,19 +116,19 @@ def annotate_data(session: irods.session, irodspath: str,
     elif session.data_objects.exists(irodspath):
         annotate_objs = [session.data_objects.get(irodspath)]
     else:
-        print(RED+"ERROR: Annotating %s failed" % (irodspath), DEFAULT)
-        print("\t Path does not exist.")
+        print_error(f"ERROR: Annotating {irodspath} failed")
+        print_message("Path does not exist.")
         return False
 
     timestamp = datetime.now()
-    print(annotate_objs)
+    print_message(annotate_objs)
     for obj in annotate_objs:
         try:
             obj.metadata.add("data_copy_on_server", serverip+":"+localpath,
                              timestamp.strftime("%Y-%m-%d"))
         except CATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME:
-            print(YEL+"INFO: Metadata already exists", irodspath, DEFAULT)
+            print_warning("INFO: Metadata already exists {irodspath}")
         except CAT_NO_ACCESS_PERMISSION:
-            print(RED+"ERROR: No permission to add metadata", irodspath, DEFAULT)
+            print_error(f"ERROR: No permission to add metadata {irodspath}")
         except Exception:
-            print(RED+"ERROR: Metadata could not be added", irodspath, DEFAULT)
+            print_error(f"ERROR: Metadata could not be added {irodspath}")

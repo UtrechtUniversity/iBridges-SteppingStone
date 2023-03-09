@@ -4,21 +4,13 @@ import csv
 from typing import Union
 
 def print_message(message: str, level: int=0) -> None:
-    # INFO = 0
-    # WARN = 1
-    # ERROR = 2
-
-    RED = '\x1b[1;31m'
-    DEFAULT = '\x1b[0m'
-    YEL = '\x1b[1;33m'
-    BLUE = '\x1b[1;34m'
-
-    if level==2:
-        print(f"{RED}{message}{DEFAULT}")
-    elif level==1:
-        print(f"{YEL}{message}{DEFAULT}")
-    else:
-        print(f"{message}")
+    colors = {
+        0: '\x1b[0m',    # DEFAULT (info)
+        1: '\x1b[1;33m', # YEL (warn)
+        2: '\x1b[1;31m', # RED (error)
+        3: '\x1b[1;34m', # BLUE (success)
+    }
+    print(f"{colors[level]}{message}{colors[0]}")
 
 def print_error(message: str) -> None:
     print_message(message, level=2)
@@ -26,23 +18,20 @@ def print_error(message: str) -> None:
 def print_warning(message: str) -> None:
     print_message(message, level=1)
 
+def print_success(message: str) -> None:
+    print_message(message, level=3)
+
 def get_config(configfile: str) -> Union[tuple, bool]:
-    if not os.path.isfile(configfile):
-        print_error(f"ERROR reading config file {configfile}")
-        print_message("\tFile does not exist.")
-        return False
-
     config = configparser.ConfigParser()
-    config.read_file(open(configfile))
-    args = config._sections
+    with open(configfile) as file:
+        config.read_file(file)
+        if 'remote' in config:
+            datauser = config.get('remote', 'datauser')
+            serverip = config.get('remote', 'serverip')
+            sudo = config.getboolean('remote', 'sudo')
+            cachelimit = (config.getfloat('local_cache', 'limit') * 1073741824) # GB to bytes
+            return (datauser, serverip, sudo, cachelimit)
 
-    if 'remote' in args:
-        datauser = config.get('remote', 'datauser')
-        serverip = config.get('remote', 'serverip')
-        sudo = config.getboolean('remote', 'sudo')
-        cachelimit = (config.getfloat('local_cache', 'limit') * 1073741824) # GB to bytes
-        return (datauser, serverip, sudo, cachelimit)
-    else:
         print_error("ERROR config section expected: remote")
         return False
 
@@ -73,9 +62,9 @@ def create_dir(path: str) -> bool:
     except Exception:
         return False
 
-def write_csv(success: list, 
-              failure: list, 
-              successpath: str, 
+def write_csv(success: list,
+              failure: list,
+              successpath: str,
               failurepath: str) -> None:
     with open(successpath, 'w') as out:
         csv_out = csv.writer(out)
