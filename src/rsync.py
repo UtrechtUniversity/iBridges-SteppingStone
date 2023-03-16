@@ -74,3 +74,35 @@ def rsync_local_to_remote(datauser: str, serverip: str, sudo: bool,
 
     print_warning("--> Data transfer complete")
     return True
+
+def rsync_remote_to_local(datauser: str, serverip: str, sudo: bool,
+                          sourcepath: str, destpath: str) -> bool:
+    """
+    Transfers data from a remote server to a local server through rsync.
+    Assumes that an ssh keypair was installed for that user beforehand (local priv/pub key
+    and remote authorized_keys files are setup).
+    
+    Returns: True (success), False (failure)
+    """
+
+    print_message(f"Downloading data: {datauser}@{serverip}:{sourcepath} --> {destpath}")
+    if sudo:
+        res = subprocess.run(['rsync', '--rsync-path="sudo rsync"',
+                              '-rc --relative', 
+                              f"{datauser}@{serverip}:{sourcepath}", destpath],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    else:
+        res = subprocess.run(['rsync', '-rc',
+                              f"{datauser}@{serverip}:{sourcepath}", destpath],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+
+    if res.stderr:
+        print_error(f"rsync failed: {str(res.stderr)}")
+        return False
+
+    print_warning("--> Data transfer complete")
+    return True
+
+
+
+
