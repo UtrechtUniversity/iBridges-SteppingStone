@@ -37,6 +37,32 @@ def init_irods_connection(irods_env_file: str) -> Union[tuple, bool]:
     print_message("Please do an iinit")
     return False
 
+def irsync_local_to_irods(session: irods.session.iRODSSession, localpath: str, 
+                          irodspath: str):
+    """
+    Transfers data from a local filesystem to iRODS. Checks checksums.
+    Returns: True upon success; False otherwise.
+    """
+
+    if not session.collections.exists(irodspath):
+        print_error(f"ERROR: Destination {irodspath} does not exist")
+        return false
+
+    filename = os.path.basename(localpath)
+    if os.path.isdir(localpath) or os.path.isfile(localpath):
+        res = subprocess.run(["irsync", "-Kr", f"{localpath}", f"i:{irodspath}/{filename}"],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        if res.returncode == 0:
+            return True
+
+        print_error(f"ERROR: Transferring {localpath} --> {irodspath} failed")
+        print_message(res)
+        return False
+
+    print_error(f"ERROR: Transferring {localpath} --> {irodspath} failed")
+    print_message("Local path not known.")
+    return False
+
 def irsync_irods_to_local(session: irods.session.iRODSSession, irodspath: str,
                           localpath: str) -> bool:
     """
