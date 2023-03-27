@@ -40,6 +40,14 @@ def empty_dir(directory: str):
         elif path.is_dir():
             rmtree(path)
 
+def remote_path_exists(user: str, server: str, path: str) -> bool:
+    res = subprocess.run(["ssh", f"{user}@{server}", f"ls {path}"],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    if res.stderr:
+        return False
+    else:
+        return True
+
 def rsync_local_to_remote(datauser: str, serverip: str, sudo: bool,
                           sourcepath: str, destpath: str) -> bool:
     """
@@ -103,6 +111,27 @@ def rsync_remote_to_local(datauser: str, serverip: str, sudo: bool,
     print_warning("--> Data transfer complete")
     return True
 
+def get_remote_size(user: str, server: str, path_names: list) -> int:
+    """
+    Checks cumulative file size of all files in the list path_names on the remote servere.
+    The list can also contain directories.
+    Params:
+        user: remote user name
+        server: FQDN or IP address
+        path_names: list of absolute paths on the remote server
+    Returns: cumulative file size
+    """
+    size = 0
+    for path in path_names: 
+        res = subprocess.run(['ssh', f'{user}@{server}', 'du', '-bs', f'{path}'], 
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        if res.stdout:
+            path_size = int(res.stdout.split()[0].decode())
+            size = size + path_size
+        else:
+            print_error(f"Cannot determine size: {path}")
+            print_error(f"{res.stderr}")
 
+    return size
 
 
