@@ -17,7 +17,8 @@ class iBridgesSteppingStone:
                  transfer_config: str,
                  irods_env_file: str,
                  input_csv: str,
-                 output_folder: str) -> None:
+                 output_folder: str, 
+                 operation: str) -> None:
 
         for file in [irods_env_file, transfer_config, input_csv]:
             if not os.path.exists(file):
@@ -28,14 +29,15 @@ class iBridgesSteppingStone:
         self.transfer_config = transfer_config
         self.input_csv = input_csv
         self.output_folder = output_folder
+        self.operation = operation
 
     @classmethod
     def from_arguments(cls):
         parser = argparse.ArgumentParser(
             prog='python transfer_workflow.py',
-            description='Transfers data from Yoda/iRODS to a destination server through '
-                        +'a stepping stone server.',
-            epilog='Usage example: python transfer_workflow.py -i /home/user/transfer.csv'
+            description='Transfers data between Yoda/iRODS and a destination server through '
+                        +'a stepping stone server',
+            epilog='Usage example: python transfer_workflow.py -i /home/user/transfer.csv -p export'
             )
 
         default_xfr_cfg = os.path.join(str(os.getenv('HOME')), '.irods', 'transfer.config')
@@ -53,6 +55,9 @@ class iBridgesSteppingStone:
         parser.add_argument('--env', '-e', type=str,
                             help=f'path to iRods environment config (default: {default_irods_env})',
                             default=default_irods_env)
+        parser.add_argument('--operation', '-p', type=str,
+                            help=f'export (iRODS/YODA to remote server, import (remote server to iRODS/YODA)')
+
 
         args = parser.parse_args()
 
@@ -60,9 +65,10 @@ class iBridgesSteppingStone:
             input_csv=args.input,
             output_folder=args.output,
             transfer_config=args.config,
-            irods_env_file=args.env)
+            irods_env_file=args.env,
+            operation=args.operation)
 
-    def transfer(self):
+    def export(self):
         source_to_dest = src.utils.read_source_dest_csv(filename=self.input_csv)
 
         if len(source_to_dest) == 0:
@@ -108,11 +114,12 @@ class iBridgesSteppingStone:
             print_error(f"ERROR: Cannot create local cache {localcache}")
             sys.exit(1)
 
+        
         for key, file in source_to_dest.items():
             print_message(f"STATUS: Fetch data from iRODS {key} --> {localcache}")
-
-            # Determine size of source
             size = src.irods_functions.get_irods_size(session, [key])
+            
+            # Determine size of source
             if size > cachelimit:
                 print_warning(f"WARNING: Datasize exceeds cache size: {key}")
                 failure.append((key, file, "Exceeds cache"))
@@ -169,5 +176,10 @@ if __name__ == "__main__":
     bridge = iBridgesSteppingStone.from_arguments()
     # or
     # bridge = iBridgesSteppingStone(input_csv='/data/ibridges/test.csv', transfer_config='...', output_folder='...')
+    if bridge.operation == "export":
+        bridge.export()
+    elif bridge.operation == "import":
+        print_message(f'Importing data into iRODS: TODO')
+    else:
+        print_error(f'Operation not defined: {bridge.operation}')
 
-    bridge.transfer()
