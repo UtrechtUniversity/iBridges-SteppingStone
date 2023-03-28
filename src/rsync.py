@@ -48,6 +48,17 @@ def remote_path_exists(user: str, server: str, path: str) -> bool:
     else:
         return True
 
+def is_remote_dir(user: str, server: str, path: str) -> bool:
+    res = subprocess.run(["ssh", f"{user}@{server}", f"test -d { path } && echo 'Directory Exists    '"], 
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    if res.stdout == "Directory Exists":
+        return True
+    elif res.stderr:
+        return False
+    else:
+        return False
+
+
 def rsync_local_to_remote(datauser: str, serverip: str, sudo: bool,
                           sourcepath: str, destpath: str) -> bool:
     """

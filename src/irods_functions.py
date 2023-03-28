@@ -159,12 +159,12 @@ def annotate_data(session: irods.session, irodspath: str,
         except Exception:
             print_error(f"ERROR: Metadata could not be added {irodspath}")
 
-def ensure_coll(sessiom: irods.session, irodspath:str):
+def ensure_coll(session: irods.session, irodspath:str):
     try:
-        if self.session.collections.exists(irodspath):
+        if session.collections.exists(irodspath):
             return True
         else:
-            self.session.collections.create(coll_name)
+            session.collections.create(irodspath)
             return True
     except irods.exception.CAT_NO_ACCESS_PERMISSION as cnap:
         print_error(f'ERROR: Could not create {irodspath}')
