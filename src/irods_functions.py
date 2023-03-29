@@ -7,6 +7,7 @@ import irods.session
 from irods.exception import CATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME, CAT_NO_ACCESS_PERMISSION
 from src.utils import print_error, print_warning, print_message
 
+
 def read_irods_env(irods_env_file: str) -> dict:
     """
     Expects a json file in ~/.irods/irods_environment.json
@@ -15,6 +16,7 @@ def read_irods_env(irods_env_file: str) -> dict:
     with open(irods_env_file) as file:
         ienv = json.load(file)
     return ienv
+
 
 def init_irods_connection(irods_env_file: str) -> Union[tuple, bool]:
     """
@@ -37,7 +39,8 @@ def init_irods_connection(irods_env_file: str) -> Union[tuple, bool]:
     print_message("Please do an iinit")
     return False
 
-def irsync_local_to_irods(session: irods.session.iRODSSession, localpath: str, 
+
+def irsync_local_to_irods(session: irods.session.iRODSSession, localpath: str,
                           irodspath: str):
     """
     Transfers data from a local filesystem to iRODS. Checks checksums and registers them in iRODS.
@@ -46,7 +49,7 @@ def irsync_local_to_irods(session: irods.session.iRODSSession, localpath: str,
     print_message(f"iRODS irsync: {localpath} --> {irodspath}")
     if not session.collections.exists(irodspath):
         print_error(f"ERROR: Destination {irodspath} does not exist")
-        return false
+        return False
 
     filename = os.path.basename(localpath)
     if os.path.isdir(localpath):
@@ -86,7 +89,7 @@ def irsync_irods_to_local(session: irods.session.iRODSSession, irodspath: str,
     itemname = os.path.basename(irodspath)
     if session.collections.exists(irodspath) or session.data_objects.exists(irodspath):
         res = subprocess.run(["irsync", "-Kr", f"i:{irodspath}", f"{localpath}/{itemname}"],
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
         if res.returncode == 0:
             return True
 
@@ -97,6 +100,7 @@ def irsync_irods_to_local(session: irods.session.iRODSSession, irodspath: str,
     print_error(f"ERROR: Transferring {irodspath} --> {localpath} failed")
     print_message("iRODS path not known.")
     return False
+
 
 def get_irods_size(session: irods.session, path_names: list) -> int:
     """
@@ -116,7 +120,9 @@ def get_irods_size(session: irods.session, path_names: list) -> int:
             irods_sizes.append(sum((sum((obj.size for obj in objs)) for _, _, objs in coll.walk())))
     return sum(irods_sizes)
 
-def map_collitems_to_folder(session: irods.session, collpath: str, folder: str, localpath_to_irods=False) -> list:
+
+def map_collitems_to_folder(session: irods.session, collpath: str, folder: str,
+                            localpath_to_irods=False) -> list:
     """
     Mapping all members of a collection to their absolute path in a folder on a linux filesystem.
     Params:
@@ -136,8 +142,8 @@ def map_collitems_to_folder(session: irods.session, collpath: str, folder: str, 
             obj_to_file.append((destination+obj.path.split(coll.path)[1], obj.path))
         else:
             obj_to_file.append((obj.path, destination+obj.path.split(coll.path)[1]))
-    
     return obj_to_file
+
 
 def annotate_data(session: irods.session, irodspath: str,
                   localpath: str, serverip: str):
@@ -172,13 +178,14 @@ def annotate_data(session: irods.session, irodspath: str,
         except Exception:
             print_error(f"ERROR: Metadata could not be added {irodspath}")
 
-def ensure_coll(session: irods.session, irodspath:str):
+
+def ensure_coll(session: irods.session, irodspath: str):
     try:
         if session.collections.exists(irodspath):
             return True
         else:
             session.collections.create(irodspath)
             return True
-    except irods.exception.CAT_NO_ACCESS_PERMISSION as cnap:
+    except irods.exception.CAT_NO_ACCESS_PERMISSION:
         print_error(f'ERROR: Could not create {irodspath}')
         return False

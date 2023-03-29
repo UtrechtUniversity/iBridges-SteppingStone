@@ -3,6 +3,7 @@ from pathlib import Path
 from shutil import rmtree
 from src.utils import print_error, print_warning, print_message, print_success
 
+
 def ssh_check_connection(datauser: str, serverip: str) -> bool:
     """
     Check ssh datauser@serverip and execute uname -a.
@@ -16,6 +17,7 @@ def ssh_check_connection(datauser: str, serverip: str) -> bool:
 
     print_success(f"Connected: {datauser}@{serverip}")
     return True
+
 
 def create_remote_dir(datauser: str, serverip: str, sudo: bool, dirpath: str) -> bool:
     """
@@ -33,12 +35,14 @@ def create_remote_dir(datauser: str, serverip: str, sudo: bool, dirpath: str) ->
 
     return True
 
+
 def empty_dir(directory: str):
     for path in Path(directory).glob("**/*"):
         if path.is_file():
             path.unlink()
         elif path.is_dir():
             rmtree(path)
+
 
 def remote_path_exists(user: str, server: str, path: str) -> bool:
     res = subprocess.run(["ssh", f"{user}@{server}", f"ls {path}"],
@@ -48,9 +52,10 @@ def remote_path_exists(user: str, server: str, path: str) -> bool:
     else:
         return True
 
+
 def is_remote_dir(user: str, server: str, path: str) -> bool:
-    res = subprocess.run(["ssh", f"{user}@{server}", f"test -d { path } && echo 'Directory Exists    '"], 
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    res = subprocess.run(["ssh", f"{user}@{server}", f"test -d { path } && echo 'Directory Exists'"],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     if res.stdout == "Directory Exists":
         return True
     elif res.stderr:
@@ -78,14 +83,13 @@ def rsync_local_to_remote(datauser: str, serverip: str, sudo: bool,
 
     print_message(f"Uploading data: {sourcepath} --> {datauser}@{serverip}:{destpath}")
     if sudo:
-        res = subprocess.run(['rsync', '--rsync-path="sudo rsync"',
-                              '-rc --relative', sourcepath,
-                              f"{datauser}@{serverip}:{destpath}"],
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        res = subprocess.run(['rsync', '--rsync-path="sudo rsync"', '-rc --relative', sourcepath,
+                             f"{datauser}@{serverip}:{destpath}"],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     else:
         res = subprocess.run(['rsync', '-rc', sourcepath,
-                              f"{datauser}@{serverip}:{destpath}"],
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+                             f"{datauser}@{serverip}:{destpath}"],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
 
     if res.stderr:
         print_error(f"rsync failed: {str(res.stderr)}")
@@ -93,6 +97,7 @@ def rsync_local_to_remote(datauser: str, serverip: str, sudo: bool,
 
     print_warning("--> Data transfer complete")
     return True
+
 
 def rsync_remote_to_local(datauser: str, serverip: str, sudo: bool,
                           sourcepath: str, destpath: str) -> bool:
@@ -100,20 +105,18 @@ def rsync_remote_to_local(datauser: str, serverip: str, sudo: bool,
     Transfers data from a remote server to a local server through rsync.
     Assumes that an ssh keypair was installed for that user beforehand (local priv/pub key
     and remote authorized_keys files are setup).
-    
     Returns: True (success), False (failure)
     """
 
     print_message(f"Downloading data: {datauser}@{serverip}:{sourcepath} --> {destpath}")
     if sudo:
-        res = subprocess.run(['rsync', '--rsync-path="sudo rsync"',
-                              '-rc --relative', 
-                              f"{datauser}@{serverip}:{sourcepath}", destpath],
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        res = subprocess.run(['rsync', '--rsync-path="sudo rsync"', '-rc --relative',
+                             f"{datauser}@{serverip}:{sourcepath}", destpath],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     else:
         res = subprocess.run(['rsync', '-rc',
-                              f"{datauser}@{serverip}:{sourcepath}", destpath],
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+                             f"{datauser}@{serverip}:{sourcepath}", destpath],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
 
     if res.stderr:
         print_error(f"rsync failed: {str(res.stderr)}")
@@ -121,6 +124,7 @@ def rsync_remote_to_local(datauser: str, serverip: str, sudo: bool,
 
     print_warning("--> Data transfer complete")
     return True
+
 
 def get_remote_size(user: str, server: str, path_names: list) -> int:
     """
@@ -133,8 +137,8 @@ def get_remote_size(user: str, server: str, path_names: list) -> int:
     Returns: cumulative file size
     """
     size = 0
-    for path in path_names: 
-        res = subprocess.run(['ssh', f'{user}@{server}', 'du', '-bs', f'{path}'], 
+    for path in path_names:
+        res = subprocess.run(['ssh', f'{user}@{server}', 'du', '-bs', f'{path}'],
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
         if res.stdout:
             path_size = int(res.stdout.split()[0].decode())
@@ -144,5 +148,3 @@ def get_remote_size(user: str, server: str, path_names: list) -> int:
             print_error(f"{res.stderr}")
 
     return size
-
-
