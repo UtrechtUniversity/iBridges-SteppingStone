@@ -56,8 +56,8 @@ class iBridgesSteppingStone:
                             help=f'path to iRods environment config (default: {default_irods_env})',
                             default=default_irods_env)
         parser.add_argument('--operation', '-p', type=str,
-                            help=f'export (iRODS/YODA to remote server, import (remote server to iRODS/YODA)')
-
+                            help=f'export (iRODS/YODA to remote server, import (remote server to iRODS/YODA)',
+                            required=True)
 
         args = parser.parse_args()
 
