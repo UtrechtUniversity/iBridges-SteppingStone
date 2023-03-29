@@ -40,28 +40,33 @@ def init_irods_connection(irods_env_file: str) -> Union[tuple, bool]:
 def irsync_local_to_irods(session: irods.session.iRODSSession, localpath: str, 
                           irodspath: str):
     """
-    Transfers data from a local filesystem to iRODS. Checks checksums.
+    Transfers data from a local filesystem to iRODS. Checks checksums and registers them in iRODS.
     Returns: True upon success; False otherwise.
     """
-
+    print_message(f"iRODS irsync: {localpath} --> {irodspath}")
     if not session.collections.exists(irodspath):
         print_error(f"ERROR: Destination {irodspath} does not exist")
         return false
 
     filename = os.path.basename(localpath)
-    if os.path.isdir(localpath) or os.path.isfile(localpath):
+    if os.path.isdir(localpath):
         res = subprocess.run(["irsync", "-Kr", f"{localpath}", f"i:{irodspath}/{filename}"],
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
-        if res.returncode == 0:
-            return True
+    elif os.path.isfile(localpath):
+        res = subprocess.run(["irsync", "-K", f"{localpath}", f"i:{irodspath}/{filename}"],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    else:
+        print_error(f"ERROR: Transferring {localpath} --> {irodspath} failed")
+        print_message("Local path not known.")
+        return False
 
+    if res.returncode == 0:
+        return True
+    else:
         print_error(f"ERROR: Transferring {localpath} --> {irodspath} failed")
         print_message(res)
         return False
 
-    print_error(f"ERROR: Transferring {localpath} --> {irodspath} failed")
-    print_message("Local path not known.")
-    return False
 
 def irsync_irods_to_local(session: irods.session.iRODSSession, irodspath: str,
                           localpath: str) -> bool:
@@ -73,6 +78,7 @@ def irsync_irods_to_local(session: irods.session.iRODSSession, irodspath: str,
 
     Returns: True upon success; False otherwise
     """
+    print_message(f"iRODS irsync: {irodspath} --> {localpath}")
     if not os.path.isdir(localpath):
         print_error(f"ERROR: Destination {localpath} does not exist")
         return False
@@ -110,20 +116,27 @@ def get_irods_size(session: irods.session, path_names: list) -> int:
             irods_sizes.append(sum((sum((obj.size for obj in objs)) for _, _, objs in coll.walk())))
     return sum(irods_sizes)
 
-def map_collitems_to_local_path(session: irods.session, collpath: str, localpath: str) -> list:
+def map_collitems_to_folder(session: irods.session, collpath: str, folder: str, localpath_to_irods=False) -> list:
     """
-    irsync automatically creates subfolders etc, with this function we get
-    the mapping from a collection to its absolute path in a folder.
+    Mapping all members of a collection to their absolute path in a folder on a linux filesystem.
+    Params:
+    session: iRODS session
+    collpath: iRODS collection path
+    folder: linux or windows path
+    localpath_to_irods: direction of output
     """
     coll = session.collections.get(collpath)
-    destination = f"{localpath}/{os.path.basename(coll.path)}"
+    destination = f"{folder}/{os.path.basename(coll.path)}"
     objs = [obj for _, _, objs in coll.walk() for obj in objs]
 
     obj_to_file = []
 
     for obj in objs:
-        obj_to_file.append((obj.path, destination+obj.path.split(coll.path)[1]))
-
+        if localpath_to_irods:
+            obj_to_file.append((destination+obj.path.split(coll.path)[1], obj.path))
+        else:
+            obj_to_file.append((obj.path, destination+obj.path.split(coll.path)[1]))
+    
     return obj_to_file
 
 def annotate_data(session: irods.session, irodspath: str,
