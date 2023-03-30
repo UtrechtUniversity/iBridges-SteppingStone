@@ -33,17 +33,17 @@ def get_config(configfile: str) -> Union[tuple, bool]:
             return (datauser, serverip, sudo, cachelimit)
 
         print_error("ERROR config section expected: remote")
-        return False
+        return None
 
 def read_source_dest_csv(filename: str) -> dict:
-    source_to_dest = {}
+    source_to_dest = []
     with open(filename, "r") as csv_file:
         csv_reader = csv.reader(csv_file)
         for line in csv_reader:
             try:
-                source, dest = line[0].strip(), line[1].strip()
-                if source and dest:
-                    source_to_dest[source] = dest
+                source, dest = "/" + line[0].strip().strip("/"), "/" + line[1].strip().strip("/")
+                if source != "/" and dest != '/':
+                    source_to_dest.append((source, dest))
                 else:
                     print_warning(f"WARNING: Cannot read line in csv, skipping: {line}")
             except Exception:

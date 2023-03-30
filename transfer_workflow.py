@@ -17,7 +17,8 @@ class iBridgesSteppingStone:
                  transfer_config: str,
                  irods_env_file: str,
                  input_csv: str,
-                 output_folder: str) -> None:
+                 output_folder: str,
+                 operation: str) -> None:
 
         for file in [irods_env_file, transfer_config, input_csv]:
             if not os.path.exists(file):
@@ -28,14 +29,21 @@ class iBridgesSteppingStone:
         self.transfer_config = transfer_config
         self.input_csv = input_csv
         self.output_folder = output_folder
+        self.operation = operation
+
+        config = src.utils.get_config(configfile=self.transfer_config)
+        if config:
+            self.datauser, self.serverip, self.sudo, self.cachelimit = config
+
+        self.run()
 
     @classmethod
     def from_arguments(cls):
         parser = argparse.ArgumentParser(
             prog='python transfer_workflow.py',
-            description='Transfers data from Yoda/iRODS to a destination server through '
-                        +'a stepping stone server.',
-            epilog='Usage example: python transfer_workflow.py -i /home/user/transfer.csv'
+            description='Transfers data between Yoda/iRODS and a destination server through '
+                        + 'a stepping stone server',
+            epilog='Usage example: python transfer_workflow.py -i /home/user/transfer.csv -p export'
             )
 
         default_xfr_cfg = os.path.join(str(os.getenv('HOME')), '.irods', 'transfer.config')
@@ -53,6 +61,9 @@ class iBridgesSteppingStone:
         parser.add_argument('--env', '-e', type=str,
                             help=f'path to iRods environment config (default: {default_irods_env})',
                             default=default_irods_env)
+        parser.add_argument('--operation', '-p', type=str,
+                            help='export (iRODS/YODA to remote server, import (remote server to iRODS/YODA)',
+                            required=True)
 
         args = parser.parse_args()
 
@@ -60,114 +71,191 @@ class iBridgesSteppingStone:
             input_csv=args.input,
             output_folder=args.output,
             transfer_config=args.config,
-            irods_env_file=args.env)
+            irods_env_file=args.env,
+            operation=args.operation)
 
-    def transfer(self):
-        source_to_dest = src.utils.read_source_dest_csv(filename=self.input_csv)
+    def run(self):
+        if self.operation == "export":
+            self.exportData()
+        elif self.operation == "import":
+            self.importData()
+        else:
+            print_error(f'Operation not defined: {self.operation}')
 
-        if len(source_to_dest) == 0:
+    def setup_transfer(self):
+        # Initial check on csv file
+        csv_list = src.utils.read_source_dest_csv(filename=self.input_csv)
+        if len(csv_list) == 0:
             print_error("Nothing to transfer")
             print_message("Empty file, or not a CSV-file")
             sys.exit(1)
 
-        config = src.utils.get_config(configfile=self.transfer_config)
-
-        if config:
-            datauser, serverip, sudo, cachelimit = config
-        else:
-            sys.exit(1)
-
         # Check ssh connection and auth
-        if not src.rsync.ssh_check_connection(datauser, serverip):
-            sys.exit(1)
+        if not src.rsync.ssh_check_connection(self.datauser, self.serverip):
+            return None
 
         # Create iRODS session
         irods_conn = src.irods_functions.init_irods_connection(irods_env_file=self.irods_env_file)
-
         if irods_conn:
             session, _ = irods_conn
         else:
-            sys.exit(1)
+            return None
+        
+        # Create the local folder to cache data
+        localcache = os.getenv('HOME') + "/irodscache"
+        if not src.utils.create_dir(localcache):
+            print_error(f"ERROR: Cannot create local cache {localcache}")
+            return None
 
-        # Check if iRODS paths exist
-        for key in list(source_to_dest.keys()):
-            if not session.data_objects.exists(key) and not session.collections.exists(key):
-                print_warning(f"WARNING: iRODS path does not exist: {key}")
-                del source_to_dest[key]
+        # Check if data sources exist (first column of csv)
+        source_to_dest = csv_list.copy()
+        if self.operation == "import":
+            # Check if remote paths exist
+            for (source, dest) in csv_list:
+                if not src.rsync.remote_path_exists(self.datauser, self.serverip, source):
+                    print_warning(f"WARNING: Remote path does not exist: {source}")
+                    source_to_dest.remove((source, dest))
+        elif self.operation == "export":
+            # Check if iRODS paths exist
+            for (source, dest) in csv_list:
+                if not session.data_objects.exists(source) and not session.collections.exists(source):
+                    print_warning(f"WARNING: iRODS path does not exist: {source}")
+                    source_to_dest.remove((source, dest))
 
         if len(source_to_dest) == 0:
             print_error("Nothing to transfer, check CSV-file")
-            sys.exit(1)
+            return None
+        
+        return source_to_dest, session, localcache
 
-        # Execute transfer per key
-        localcache = os.getenv('HOME') + "/irodscache"
+    def write_log(self, success, failure):
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+        successpath = os.path.join(self.output_folder,
+                                   f'output_irods_data_transfer_{timestamp}.csv')
+        failurepath = os.path.join(self.output_folder,
+                                   f'error_irods_data_transfer_{timestamp}.csv')
+        src.utils.write_csv(success=success,
+                            failure=failure,
+                            successpath=successpath,
+                            failurepath=failurepath)
+
+    def importData(self):
         success = []  # tuple: source, destination
         failure = []  # triple: source, destination, fail reason
-
-        if not src.utils.create_dir(localcache):
-            print_error(f"ERROR: Cannot create local cache {localcache}")
+        setup = self.setup_transfer()
+        if setup:
+            source_to_dest, session, localcache = setup
+        else:
             sys.exit(1)
 
-        for key, file in source_to_dest.items():
+        # Copy data remote --> localcache --> irods
+        for (key, value) in source_to_dest:
+            print_message(f"STATUS: Fetch data from remote server {key} --> {localcache}")
+            size = src.rsync.get_remote_size(self.datauser, self.serverip, [key])
+
+            if size > self.cachelimit:
+                print_warning(f"WARNING: Datasize exceeds cache size: {key}")
+                failure.append((key, value, "Exceeds cache"))
+                continue
+
+            # Create iRODS collection
+            if not src.irods_functions.ensure_coll(session, value):
+                print_warning(f"WARNING: Skipping: {key, value}")
+                failure.append((key, value, "Destination could not be created"))
+                continue
+
+            # rsync to stepping stone
+            rsync_success = src.rsync.rsync_remote_to_local(self.datauser, self.serverip,
+                                                            self.sudo, key, localcache)
+            if not rsync_success:
+                print_warning(f"WARNING: Remote to cache failed: {key, value}")
+                failure.append((key, value, "rsync remote to local failed"))
+                src.rsync.empty_dir(localcache)
+
+            # irsync to iRODS
+            item_name = os.path.basename(key)
+            irods_success = src.irods_functions.irsync_local_to_irods(
+                    session, localcache + '/' + item_name, value)
+            if irods_success:
+                print_message("--> Data transfer complete")
+                success.append((key, f'{value}/{os.path.basename(key)}'))
+                if session.collections.exists(f'{value}/{os.path.basename(key)}'):
+                    success.extend(src.irods_functions.map_collitems_to_folder(
+                        session, f'{value}/{os.path.basename(key)}', key, True))
+                src.rsync.empty_dir(localcache)
+            else:
+                print_warning(f"WARNING: Local to iRODS failed: {key, value}")
+                failure.append((key, value, "irsync local to iRODS failed"))
+                src.rsync.empty_dir(localcache)
+                continue
+
+        self.write_log(success, failure)
+
+    def exportData(self):
+        success = []
+        failure = []
+        setup = self.setup_transfer()
+        if setup:
+            source_to_dest, session, localcache = setup
+        else:
+            sys.exit(1)
+
+        # Copy data irods --> localcache --> remote
+        for (key, value) in source_to_dest:
             print_message(f"STATUS: Fetch data from iRODS {key} --> {localcache}")
+            size = src.irods_functions.get_irods_size(session, [key])
 
             # Determine size of source
-            size = src.irods_functions.get_irods_size(session, [key])
-            if size > cachelimit:
+            if size > self.cachelimit:
                 print_warning(f"WARNING: Datasize exceeds cache size: {key}")
-                failure.append((key, file, "Exceeds cache"))
+                failure.append((key, value, "Exceeds cache"))
                 continue
 
             # create destination folder on remote server
-            mkdir_remote = src.rsync.create_remote_dir(datauser, serverip, sudo, file)
+            mkdir_remote = src.rsync.create_remote_dir(self.datauser, self.serverip, 
+                                                       self.sudo, value)
             if not mkdir_remote:
-                print_error(f"ERROR: mkdir on remote server failed {file}")
-                failure.append((key, file, "Creating remote dir failed"))
+                print_error(f"ERROR: mkdir on remote server failed {value}")
+                failure.append((key, value, "Creating remote dir failed"))
                 continue
 
             # irsync data to stepping stone
             irods_success = src.irods_functions.irsync_irods_to_local(session, key, localcache)
             if not irods_success:
                 print_error(f"ERROR iRODS: transfer failed {key} {localcache}")
-                failure.append((key, file, "iRODS transfer (irsync) failed"))
+                failure.append((key, value, "iRODS transfer (irsync) failed"))
+                src.rsync.empty_dir(localcache)
                 continue
 
             # rsync data from stepping stone to destination server
-            destination = file
             rsync_success = src.rsync.rsync_local_to_remote(
-                    datauser, serverip, sudo, f"{localcache}/{os.path.basename(key)}", destination)
+                    self.datauser, self.serverip, self.sudo, 
+                    f"{localcache}/{os.path.basename(key)}", value)
             if rsync_success:
-                success.append((key, file))
+                print_message("--> Data transfer complete")
+                success.append((key, f"{value}/{os.path.basename(key)}"))
                 if session.collections.exists(key):
-                    success.extend(src.irods_functions.map_collitems_to_local_path(session, key, destination))
+                    success.extend(src.irods_functions.map_collitems_to_folder(session, key, value))
 
                 # Create iRODS metadata entry
                 # print("DEBUG: annotate", key)
-                # src.irods_functions.annotate_data(session, key, f"{destination}/{os.path.basename(key)}", serverip)
+                # src.irods_functions.annotate_data(session, key,
+                #                               f"{destination}/{os.path.basename(key)}", serverip)
                 # Delete cache
                 src.rsync.empty_dir(localcache)
             else:
                 print_error(f"ERROR rsync: transfer failed {localcache}/{os.path.basename(key)} "
-                            +f"{os.path.dirname(destination)}")
-                failure.append((key, file, "rsync to remote failed"))
+                            + f"{os.path.dirname(value)}")
+                failure.append((key, value, "rsync to remote failed"))
+                src.rsync.empty_dir(localcache)
                 continue
 
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
-        successpath = os.path.join(self.output_folder,
-                                   f'output_irods_data_transfer_{timestamp}.csv')
-        failurepath = os.path.join(self.output_folder,
-                                   f'error_irods_data_transfer_{timestamp}.csv')
-
-        src.utils.write_csv(success=success,
-                            failure=failure,
-                            successpath=successpath,
-                            failurepath=failurepath)
+        self.write_log(success, failure)
 
 
 if __name__ == "__main__":
 
     bridge = iBridgesSteppingStone.from_arguments()
     # or
-    # bridge = iBridgesSteppingStone(input_csv='/data/ibridges/test.csv', transfer_config='...', output_folder='...')
-
-    bridge.transfer()
+    # bridge = iBridgesSteppingStone(input_csv='/data/ibridges/test.csv',
+    #                                transfer_config='...', output_folder='...')
