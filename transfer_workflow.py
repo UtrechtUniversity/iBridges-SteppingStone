@@ -31,6 +31,10 @@ class iBridgesSteppingStone:
         self.output_folder = output_folder
         self.operation = operation
 
+        config = src.utils.get_config(configfile=self.transfer_config)
+        if config:
+            self.datauser, self.serverip, self.sudo, self.cachelimit = config
+
     @classmethod
     def from_arguments(cls):
         parser = argparse.ArgumentParser(
@@ -68,7 +72,7 @@ class iBridgesSteppingStone:
             irods_env_file=args.env,
             operation=args.operation)
 
-    def setup_transfer(self, config, source_to_dest):
+    def setup_transfer(self, source_to_dest):
         # Initial check on csv file
         if len(source_to_dest) == 0:
             print_error("Nothing to transfer")
@@ -76,21 +80,15 @@ class iBridgesSteppingStone:
             sys.exit(1)
 
         # Check ssh connection and auth
-        if config:
-            datauser, serverip, sudo, cachelimit = config
-        else:
-            sys.exit(1)
-
-        # Check ssh connection and auth
         if not src.rsync.ssh_check_connection(datauser, serverip):
-            sys.exit(1)
+            return None
 
         # Create iRODS session
         irods_conn = src.irods_functions.init_irods_connection(irods_env_file=self.irods_env_file)
         if irods_conn:
             session, _ = irods_conn
         else:
-            sys.exit(1)
+            return None
 
         localcache = os.getenv('HOME') + "/irodscache"
         success = []  # tuple: source, destination
@@ -115,15 +113,16 @@ class iBridgesSteppingStone:
             sys.exit(1)
 
     def importData(self):
-        print("Whoohooo")
         source_to_dest = src.utils.read_source_dest_csv(filename=self.input_csv)
-        config = src.utils.get_config(configfile=self.transfer_config)
-        datauser, serverip, sudo, cachelimit = config
-        session, localcache, success, failure = self.setup_transfer(config, source_to_dest)
+        setup = self.setup_transfer(config, source_to_dest)
+        if setup:
+            session, localcache, success, failure = setup
+        else:
+            sys.exit(1)
 
         # Check if remote paths exist
         for key in list(source_to_dest.keys()):
-            if not src.rsync.remote_path_exists(datauser, serverip, key):
+            if not src.rsync.remote_path_exists(self.datauser, self.serverip, key):
                 print_warning(f"WARNING: Remote path does not exist: {key}")
                 del source_to_dest[key]
         if len(source_to_dest) == 0:
@@ -135,7 +134,7 @@ class iBridgesSteppingStone:
         # Copy data remote --> localcache --> irods
         for key, value in source_to_dest.items():
             print_message(f"STATUS: Fetch data from remote server {key} --> {localcache}")
-            size = src.rsync.get_remote_size(datauser, serverip, [key])
+            size = src.rsync.get_remote_size(self.datauser, self.serverip, [key])
 
             if size > cachelimit:
                 print_warning(f"WARNING: Datasize exceeds cache size: {key}")
@@ -149,8 +148,8 @@ class iBridgesSteppingStone:
                 continue
 
             # rsync to stepping stone
-            rsync_success = src.rsync.rsync_remote_to_local(datauser, serverip,
-                                                            sudo, key, localcache)
+            rsync_success = src.rsync.rsync_remote_to_local(self.datauser, self.serverip,
+                                                            self.sudo, key, localcache)
             if not rsync_success:
                 print_warning(f"WARNING: Remote to cache failed: {key, value}")
                 failure.append((key, value, "rsync remote to local failed"))
@@ -175,9 +174,11 @@ class iBridgesSteppingStone:
 
     def exportData(self):
         source_to_dest = src.utils.read_source_dest_csv(filename=self.input_csv)
-        config = src.utils.get_config(configfile=self.transfer_config)
-        datauser, serverip, sudo, cachelimit = config
-        session, localcache, success, failure = self.setup_transfer(config, source_to_dest)
+        setup = self.setup_transfer(config, source_to_dest)
+        if setup:
+            session, localcache, success, failure = setup
+        else:
+            sys.exit(1)
 
         # Check if iRODS paths exist
         for key in list(source_to_dest.keys()):
@@ -202,7 +203,8 @@ class iBridgesSteppingStone:
                 continue
 
             # create destination folder on remote server
-            mkdir_remote = src.rsync.create_remote_dir(datauser, serverip, sudo, value)
+            mkdir_remote = src.rsync.create_remote_dir(self.datauser, self.serverip, 
+                                                       self.sudo, value)
             if not mkdir_remote:
                 print_error(f"ERROR: mkdir on remote server failed {value}")
                 failure.append((key, value, "Creating remote dir failed"))
@@ -217,7 +219,8 @@ class iBridgesSteppingStone:
 
             # rsync data from stepping stone to destination server
             rsync_success = src.rsync.rsync_local_to_remote(
-                    datauser, serverip, sudo, f"{localcache}/{os.path.basename(key)}", value)
+                    self.datauser, self.serverip, self.sudo, 
+                    f"{localcache}/{os.path.basename(key)}", value)
             if rsync_success:
                 print_message("--> Data transfer complete")
                 success.append((key, f"{value}/{os.path.basename(key)}"))

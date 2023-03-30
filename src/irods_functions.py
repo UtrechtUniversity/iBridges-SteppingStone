@@ -51,12 +51,12 @@ def irsync_local_to_irods(session: irods.session.iRODSSession, localpath: str,
         print_error(f"ERROR: Destination {irodspath} does not exist")
         return False
 
-    filename = os.path.basename(localpath)
+    localname = os.path.basename(localpath)
     if os.path.isdir(localpath):
-        res = subprocess.run(["irsync", "-Kr", f"{localpath}", f"i:{irodspath}/{filename}"],
+        res = subprocess.run(["irsync", "-Kr", f"{localpath}", f"i:{irodspath}/{localname}"],
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     elif os.path.isfile(localpath):
-        res = subprocess.run(["irsync", "-K", f"{localpath}", f"i:{irodspath}/{filename}"],
+        res = subprocess.run(["irsync", "-K", f"{localpath}", f"i:{irodspath}/{localname}"],
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     else:
         print_error(f"ERROR: Transferring {localpath} --> {irodspath} failed")
