@@ -95,7 +95,6 @@ def rsync_local_to_remote(datauser: str, serverip: str, sudo: bool,
         print_error(f"rsync failed: {str(res.stderr)}")
         return False
 
-    print_warning("--> Data transfer complete")
     return True
 
 
@@ -122,7 +121,6 @@ def rsync_remote_to_local(datauser: str, serverip: str, sudo: bool,
         print_error(f"rsync failed: {str(res.stderr)}")
         return False
 
-    print_warning("--> Data transfer complete")
     return True
 
 

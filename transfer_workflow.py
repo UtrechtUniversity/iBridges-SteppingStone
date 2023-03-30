@@ -35,6 +35,8 @@ class iBridgesSteppingStone:
         if config:
             self.datauser, self.serverip, self.sudo, self.cachelimit = config
 
+        self.run()
+
     @classmethod
     def from_arguments(cls):
         parser = argparse.ArgumentParser(
@@ -72,6 +74,14 @@ class iBridgesSteppingStone:
             irods_env_file=args.env,
             operation=args.operation)
 
+    def run(self):
+        if self.operation == "export":
+            self.exportData()
+        elif self.operation == "import":
+            self.importData()
+        else:
+            print_error(f'Operation not defined: {self.operation}')
+
     def setup_transfer(self, source_to_dest):
         # Initial check on csv file
         if len(source_to_dest) == 0:
@@ -80,7 +90,7 @@ class iBridgesSteppingStone:
             sys.exit(1)
 
         # Check ssh connection and auth
-        if not src.rsync.ssh_check_connection(datauser, serverip):
+        if not src.rsync.ssh_check_connection(self.datauser, self.serverip):
             return None
 
         # Create iRODS session
@@ -114,7 +124,7 @@ class iBridgesSteppingStone:
 
     def importData(self):
         source_to_dest = src.utils.read_source_dest_csv(filename=self.input_csv)
-        setup = self.setup_transfer(config, source_to_dest)
+        setup = self.setup_transfer(source_to_dest)
         if setup:
             session, localcache, success, failure = setup
         else:
@@ -136,7 +146,7 @@ class iBridgesSteppingStone:
             print_message(f"STATUS: Fetch data from remote server {key} --> {localcache}")
             size = src.rsync.get_remote_size(self.datauser, self.serverip, [key])
 
-            if size > cachelimit:
+            if size > self.cachelimit:
                 print_warning(f"WARNING: Datasize exceeds cache size: {key}")
                 failure.append((key, value, "Exceeds cache"))
                 continue
@@ -153,6 +163,7 @@ class iBridgesSteppingStone:
             if not rsync_success:
                 print_warning(f"WARNING: Remote to cache failed: {key, value}")
                 failure.append((key, value, "rsync remote to local failed"))
+                src.rsync.empty_dir(localcache)
 
             # irsync to iRODS
             item_name = os.path.basename(key)
@@ -168,13 +179,14 @@ class iBridgesSteppingStone:
             else:
                 print_warning(f"WARNING: Local to iRODS failed: {key, value}")
                 failure.append((key, value, "irsync local to iRODS failed"))
+                src.rsync.empty_dir(localcache)
                 continue
 
         self.write_log(success, failure)
 
     def exportData(self):
         source_to_dest = src.utils.read_source_dest_csv(filename=self.input_csv)
-        setup = self.setup_transfer(config, source_to_dest)
+        setup = self.setup_transfer(source_to_dest)
         if setup:
             session, localcache, success, failure = setup
         else:
@@ -197,7 +209,7 @@ class iBridgesSteppingStone:
             size = src.irods_functions.get_irods_size(session, [key])
 
             # Determine size of source
-            if size > cachelimit:
+            if size > self.cachelimit:
                 print_warning(f"WARNING: Datasize exceeds cache size: {key}")
                 failure.append((key, value, "Exceeds cache"))
                 continue
@@ -215,6 +227,7 @@ class iBridgesSteppingStone:
             if not irods_success:
                 print_error(f"ERROR iRODS: transfer failed {key} {localcache}")
                 failure.append((key, value, "iRODS transfer (irsync) failed"))
+                src.rsync.empty_dir(localcache)
                 continue
 
             # rsync data from stepping stone to destination server
@@ -237,6 +250,7 @@ class iBridgesSteppingStone:
                 print_error(f"ERROR rsync: transfer failed {localcache}/{os.path.basename(key)} "
                             + f"{os.path.dirname(value)}")
                 failure.append((key, value, "rsync to remote failed"))
+                src.rsync.empty_dir(localcache)
                 continue
 
         self.write_log(success, failure)
@@ -248,9 +262,3 @@ if __name__ == "__main__":
     # or
     # bridge = iBridgesSteppingStone(input_csv='/data/ibridges/test.csv',
     #                                transfer_config='...', output_folder='...')
-    if bridge.operation == "export":
-        bridge.exportData()
-    elif bridge.operation == "import":
-        bridge.importData()
-    else:
-        print_error(f'Operation not defined: {bridge.operation}')
