@@ -1,3 +1,4 @@
+[![DOI](https://zenodo.org/badge/602078408.svg)](https://zenodo.org/badge/latestdoi/602078408)
 # iBridges-SteppingStone
 The scripts in this repository are developed for transferring data from Yoda/iRODS to a destination server through a stepping stone server in the middle.
 
